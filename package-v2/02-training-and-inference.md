@@ -20,24 +20,32 @@
 
 Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
 
-## Training results (7B, job 44)
+## Training results (7B)
 
-- **43 min 44 s**, 592 steps, 7.5 conversations/s.
-- **GPU utilisation 96–100 % on both nodes** (target > 80 %), ~40 GB of 80 GB GPU memory used.
-- Train loss 1.54 → 0.43. **Validation loss fell at every check (0.536 → 0.433)**, so no overfitting.
+| | 2 epochs (job 44) | 3 epochs (job 379) |
+|---|---|---|
+| Run time | 43 min 44 s, 592 steps | 1 h 05 min, 888 steps |
+| Throughput | 7.5 conversations/s | 7.5 conversations/s |
+| GPU utilisation | 96–100 % on both nodes | ~100 % (worker-0, W&B) |
+| Train loss | 1.54 → 0.43 | 1.59 → 0.38 |
+| Validation loss | 0.536 → 0.433 | 0.535 → 0.409 |
+
+- The target was > 80 % GPU utilisation. GPU memory used: ~40–45 GB of 80 GB.
 - The adapter is only **155 MB**. Checkpoints are saved every 100 steps, and the job auto-resumes from them.
+
+**Charts from the 3-epoch run (Weights & Biases)**
 
 **Training loss**
 
 ![Training loss](../imgs/train-loss.png)
 
-- Drops fast in the first ~30 steps (1.5 → 0.6) as the model picks up the tool-call format, then declines slowly to ~0.42.
+- Drops fast in the first ~30 steps as the model picks up the tool-call format, then declines slowly to ~0.38. The dark line is smoothed.
 
 **Validation loss**
 
 ![Validation loss](../imgs/eval-loss.png)
 
-- Measured on data the model never trains on. It falls at every check and levels off near the end, so the model is learning, not memorising.
+- Measured on data the model never trains on. It falls at every check and levels off near 0.41, so the model is learning, not memorising.
 
 **Learning rate**
 
@@ -45,11 +53,20 @@ Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
 
 - Short warm-up, then cosine decay to 0, which is why both loss curves flatten at the end.
 
-**GPU utilisation (worker-0)**
+**GPU memory and utilisation (worker-0)**
 
-![GPU utilisation](../imgs/gpu-util.png)
+![GPU memory and utilisation](../imgs/gpu-util.png)
 
-- Close to **100 % for the whole run**. The short dips are the periodic validation and checkpoint pauses.
+- GPU utilisation stays close to **100 % for the whole 64-minute run**. The short dips are the periodic validation and checkpoint pauses.
+
+**Nebius console (worker-1, last ~12 minutes of the run)**
+
+| Used frame buffer | Memory utilization |
+|---|---|
+| ![Used frame buffer](../imgs/nebius-gpu.png) | ![Memory utilization](../imgs/nebius-gpu-util.png) |
+
+- **Used frame buffer:** ~45 GB of GPU memory in use until training ends.
+- **Memory utilization** is GPU memory *bandwidth*, busy 60–80 % of the time (not memory used).
 
 ## Inference: serving both models
 
@@ -65,13 +82,17 @@ Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
 - Both models answer the same **725 held-out test turns**, using greedy decoding and the same prompts.
 - A scorer compares their tool calls with the reference answers.
 
-| Metric | Base | Fine-tuned | Change |
+| Metric | Base | Fine-tuned, 2 epochs | Fine-tuned, 3 epochs |
 |---|---|---|---|
-| **Exact match** (name + all arguments) | 56.4 % | **68.2 %** | **+11.8 pts** |
-| … single call / parallel calls | 67.3 / 40.2 % | 79.9 / 50.8 % | +12.6 / +10.6 |
-| Right tool chosen | 87.6 % | 91.1 % | +3.5 |
-| **Correctly answered without a tool** | 60.3 % | **78.0 %** | **+17.7** |
-| Malformed tool call | 0.4 % | 0.4 % | 0 |
+| **Exact match** (name + all arguments) | 56.4 % | **68.2 %** (+11.8) | **68.2 %** (+11.8) |
+| … single call / parallel calls | 67.3 / 40.2 % | 79.9 / 50.8 % | 79.6 / 51.3 % |
+| Right tool chosen | 87.6 % | 91.1 % | 90.9 % |
+| **Correctly answered without a tool** | 60.3 % | **78.0 %** (+17.7) | **80.2 %** (+19.9) |
+| Malformed tool call | 0.4 % | 0.4 % | 0.2 % |
+| Validation loss | – | 0.433 | 0.409 |
+| Training time | – | 44 min | 65 min |
+
+- **3 epochs vs 2:** slightly better (lower validation loss, +2.2 pts on answering without a tool, fewer malformed calls) for ~50 % more training time. Exact match is unchanged.
 
 - **What improved:**
   - Calls with unrequested extra arguments fell from **120 to 31**.
@@ -87,14 +108,10 @@ Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
 
 ## Challenges
 
-- **The data needed clean-up to get correctly formatted training examples:** the "cleaned" Hugging Face copy had wrong labels, and tool-call arguments were double-encoded (quoted JSON strings). Rebuilt from the original ToolACE and checked against Qwen's chat template.
-- **Training crashed at start-up:** `warmup_ratio` was removed in transformers 5. Switched to `warmup_steps` and pinned the library versions.
-- **The rendezvous picked `docker0`** instead of `eth0`. Now the IP is resolved with `getent hosts`.
-- **The vLLM jobs had start-up and exit problems:** the server needed its environment activated (`ninja` not found), and the batch job never exited after finishing, holding the GPU. Both fixed.
-- **Multi-turn requests to the server returned HTTP 400** (the dataset's history format differs from the OpenAI API). Fixed by converting the history in the comparison client.
-- **W&B showed the successful run as failed** because of an unclean shutdown. Cosmetic; fixed for later runs.
+- **The dataset had incorrect labels.** A "cleaned" copy on Hugging Face had missing arguments and wrong tool calls, so the data was rebuilt from the original ToolACE and checked to match the model's expected format.
+- **The two nodes tried to connect over the wrong network interface** (`docker0`, which is down, instead of `eth0`). Fixed by resolving each node's `eth0` address explicitly.
 
 ## Next steps
 
-- Tune hyperparameters one change at a time (e.g. a 3rd epoch, since validation loss was still falling).
+- Tune further hyperparameters one change at a time (e.g. learning rate, LoRA rank), comparing by validation loss.
 - Scale the same scripts to 8-GPU InfiniBand nodes for the full reservation.

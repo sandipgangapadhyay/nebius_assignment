@@ -11,9 +11,9 @@
 
 ## A. Infrastructure 🖥️
 
-**1. Configure.** In `soperator/installations/example`, set your values in `terraform.tfvars`: workers, filestore, SSH key.
+**1. Configure.** `soperator/installations/example/terraform.tfvars` is already set for this PoC (2 × 1-GPU workers, 1 TiB jail). Optionally replace the SSH public key with your own.
 
-**2. Load credentials and the remote-state backend.**
+**2. Load credentials and the remote-state backend.** First set `TF_BACKEND_AWS_ACCESS_KEY_ID` and `TF_BACKEND_AWS_SECRET_ACCESS_KEY` in `soperator-ganguly-sandip-backend-secret.env`; they are masked in this package.
 
 ```bash
 cd soperator/installations/example
@@ -34,7 +34,7 @@ terraform plan                     # drift check: expect no real changes
 **4. Check cluster health.**
 
 ```bash
-kubectl config use-context nebius-<company>-slurm
+kubectl config use-context nebius-startup-slurm
 kubectl -n soperator get slurmclusters                         # Available
 kubectl -n soperator get pods worker-0 worker-1 login-0        # Running
 kubectl get pods -A | grep -v -E ' Running | Completed '       # nothing unhealthy
@@ -106,16 +106,9 @@ srun --jobid <ID> --overlap --label nvidia-smi --query-gpu=utilization.gpu,memor
 
 - Checkpoints are saved every 100 steps. Resubmitting the same `RUN` resumes from the last one.
 - The adapter is written to `/data/checkpoints/qwen7b-lora/adapter`.
+- **3-epoch variant** (~65 min): `sbatch --export=ALL,RUN=qwen7b-lora-3ep,EPOCHS=3 train.sbatch`, then benchmark it with `RUN=lora-7b-3ep,LORA=/data/checkpoints/qwen7b-lora-3ep/adapter`.
 
-What a healthy run looks like in W&B (with `WANDB=1`):
-
-| Training loss | Validation loss |
-|---|---|
-| ![Training loss](../imgs/train-loss.png) | ![Validation loss](../imgs/eval-loss.png) |
-| **Learning rate** | **GPU utilisation (worker-0)** |
-| ![Learning rate](../imgs/learning%20rate.png) | ![GPU utilisation](../imgs/gpu-util.png) |
-
-- Both losses should fall, and GPU utilisation should stay close to 100 %.
+- **Monitoring:** both losses should fall, and GPU utilisation should stay close to 100 %. Watch it in W&B (with `WANDB=1`) or in the Nebius console (worker VM → Metrics → GPU metrics). Example charts are in [02-training-and-inference.md](02-training-and-inference.md#training-results-7b).
 
 **7. After: benchmark base + adapter** 🔐 (1 GPU, ~5 min)
 
