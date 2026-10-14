@@ -18,7 +18,7 @@
 | Serving | vLLM as a Slurm job on 1 GPU; one server answers as both the base model and the fine-tuned model |
 | Storage | Model, data, Python environments and checkpoints on the shared 1 TiB jail filesystem |
 
-Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
+Commands to reproduce everything: [03-reproduce-and-monitor.md](03-reproduce-and-monitor.md).
 
 ## Training results (7B)
 
@@ -75,7 +75,7 @@ Commands to reproduce everything: [03-reproduce.md](03-reproduce.md).
   - `toolace`: the fine-tuned model.
 - It's an **OpenAI-compatible API**, and Qwen's tool calls are returned as standard `tool_calls`.
 - **Only one copy of the 15 GB base weights is needed.** Model and adapter are read straight from the shared filesystem.
-- **To run it:** submit `serve.sbatch` with `sbatch`, then run `chat_compare.py` for a side-by-side answer. See [03-reproduce.md](03-reproduce.md#c-inference-base-vs-fine-tuned).
+- **To run it:** submit `serve.sbatch` with `sbatch`, then run `chat_compare.py` for a side-by-side answer. See [03-reproduce-and-monitor.md](03-reproduce-and-monitor.md#c-inference-base-vs-fine-tuned).
 
 ## Comparison: base vs fine-tuned
 

@@ -52,4 +52,4 @@ Changes made to the Terraform recipe to fix the challenges above. The **Issue** 
 - New 1 TiB jail filestore
 - S3 remote state with the provided backend credentials
 
-**Masked in the zip:** only the S3 backend keys `TF_BACKEND_AWS_ACCESS_KEY_ID` and `TF_BACKEND_AWS_SECRET_ACCESS_KEY` in `installations/example/soperator-ganguly-sandip-backend-secret.env`. Replace them with the real values (and optionally the SSH key in `terraform.tfvars`) before `terraform apply`; see [03-reproduce.md](03-reproduce.md).
+**Masked in the zip:** only the S3 backend keys `TF_BACKEND_AWS_ACCESS_KEY_ID` and `TF_BACKEND_AWS_SECRET_ACCESS_KEY` in `installations/example/soperator-ganguly-sandip-backend-secret.env`. Replace them with the real values (and optionally the SSH key in `terraform.tfvars`) before `terraform apply`; see [03-reproduce-and-monitor.md](03-reproduce-and-monitor.md).

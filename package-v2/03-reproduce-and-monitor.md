@@ -1,4 +1,4 @@
-# 3. How to deploy and reproduce
+# 3. How to reproduce and monitor
 
 > 🖥️ = run on your machine · 🔐 = run on the Slurm login node · `<ID>` = Slurm job ID
 
@@ -100,15 +100,13 @@ cd ~/training && sbatch --export=ALL,MODEL=/data/models/Qwen2.5-1.5B-Instruct,RU
 
 ```bash
 cd ~/training && sbatch --export=ALL,RUN=qwen7b-lora train.sbatch     # add WANDB=1 for W&B charts
-tail -f train-lora-<ID>.out                                           # loss, eval_loss
-srun --jobid <ID> --overlap --label nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
 ```
+
+- Watch progress and GPU use as described in [D. Monitoring](#d-monitoring).
 
 - Checkpoints are saved every 100 steps. Resubmitting the same `RUN` resumes from the last one.
 - The adapter is written to `/data/checkpoints/qwen7b-lora/adapter`.
 - **3-epoch variant** (~65 min): `sbatch --export=ALL,RUN=qwen7b-lora-3ep,EPOCHS=3 train.sbatch`, then benchmark it with `RUN=lora-7b-3ep,LORA=/data/checkpoints/qwen7b-lora-3ep/adapter`.
-
-- **Monitoring:** both losses should fall, and GPU utilisation should stay close to 100 %. Watch it in W&B (with `WANDB=1`) or in the Nebius console (worker VM → Metrics → GPU metrics). Example charts are in [02-training-and-inference.md](02-training-and-inference.md#training-results-7b).
 
 **7. After: benchmark base + adapter** 🔐 (1 GPU, ~5 min)
 
@@ -165,10 +163,17 @@ curl -s http://worker-0:8000/v1/chat/completions -H 'Content-Type: application/j
 - From your machine: `ssh -i ~/.ssh/id_ed25519 -L 8000:worker-0:8000 root@<login-node-ip>`, then use `http://localhost:8000`.
 - Stop the server: `scancel <ID>`.
 
-## D. Useful checks 🔐
+## D. Monitoring
 
-| What | Command |
+**What healthy looks like:** training loss and validation loss both fall, and GPU utilisation stays close to 100 % on both workers (target > 80 %). Screenshots from our run are in [02-training-and-inference.md](02-training-and-inference.md#training-results-7b).
+
+| What to watch | Where / command |
 |---|---|
-| Queue / job result | `squeue` · `sacct -j <ID> -o JobID,State,Elapsed,ExitCode` |
-| Cancel a job | `scancel <ID>` |
-| Metrics of one run | `cat /data/eval-runs/<RUN>/metrics.json` |
+| Job state and nodes 🔐 | `squeue` · `sacct -j <ID> -o JobID,State,Elapsed,ExitCode` |
+| Training loss and validation loss 🔐 | `tail -f ~/training/train-lora-<ID>.out` (loss every 10 steps, validation loss every 50) |
+| Live GPU use on both nodes 🔐 | `srun --jobid <ID> --overlap --label nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader -l 5` |
+| Charts: loss, learning rate, GPU | Weights & Biases run page (submit with `WANDB=1`) |
+| GPU utilisation and memory per worker | Nebius console → Compute → worker VM → **Metrics** → **GPU metrics** |
+| Checkpoints | `ls /data/checkpoints/<RUN>/` (a new one every 100 steps, last 5 kept) |
+| Benchmark results 🔐 | `cat /data/eval-runs/<RUN>/metrics.json` |
+| Cancel a job 🔐 | `scancel <ID>` |
